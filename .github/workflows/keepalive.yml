@@ -1,34 +1,44 @@
-name: MonkeyCode VM Monitor
+name: MonkeyCode Keep Alive
 
 on:
   schedule:
-    - cron: "23 */2 * * *"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-concurrency:
-  group: monkeycode-vm-monitor
-  cancel-in-progress: true
+    # 每天 UTC 03:00（北京时间 11:00）自动打卡一次
+    - cron: '0 3 * * *'
+  workflow_dispatch: # 支持在 GitHub 网页上手动点击 Run workflow 触发打卡测试
 
 jobs:
-  monitor:
+  ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
-
     steps:
-      - name: Check 3x-ui panel
-        shell: bash
+      - name: Validate Secrets
         run: |
-          set -e
-          code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}'             'https://48394-0ab6930e8b3423ba.monkeycode-ai.live/qXBSqdglxREBsxDKTM/')"
-          echo "3x-ui HTTP=$code"
-          test "$code" = "200"
+          if [ -z "${{ secrets.MONKEY_COOKIE }}" ] || [ -z "${{ secrets.MONKEY_TASK_ID }}" ]; then
+            echo "❌ 缺少必要 Secret 配置！"
+            echo "请前往该仓库的 Settings -> Secrets and variables -> Actions"
+            echo "添加 MONKEY_COOKIE 和 MONKEY_TASK_ID 两个密钥。"
+            exit 1
+          fi
+          echo "✅ Secret 配置检查通过"
 
-      - name: Check ttyd preview
-        shell: bash
-        continue-on-error: true
+      - name: Send Heartbeat to MonkeyCode
         run: |
-          code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}'             'https://7681-0ab6930e8b3423ba.monkeycode-ai.live/' || true)"
-          echo "ttyd HTTP=$code"
+          echo "正在向 MonkeyCode 任务发送保活请求..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST "https://monkeycode-ai.com/api/v1/tasks/${{ secrets.MONKEY_TASK_ID }}/messages" \
+            -H "Content-Type: application/json" \
+            -H "Cookie: ${{ secrets.MONKEY_COOKIE }}" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -d '{"content": "heartbeat", "role": "user"}')
+
+          echo "HTTP 状态码: $HTTP_STATUS"
+          echo "返回信息:"
+          cat response.json
+          echo ""
+
+          if [[ "$HTTP_STATUS" =~ ^20[0-9]$ ]]; then
+            echo "🎉 打卡成功！MonkeyCode 环境活跃时间已刷新至最新。"
+          else
+            echo "❌ 打卡失败！状态码为 $HTTP_STATUS"
+            echo "提示：请排查 Cookie 是否过期失效，或者 Task ID 是否填写正确。"
+            exit 1
+          fi
