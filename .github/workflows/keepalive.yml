@@ -1,0 +1,44 @@
+name: MonkeyCode Keepalive
+
+on:
+  schedule:
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monkeycode-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      MONKEYCODE_BASE: https://monkeycode-ai.net
+      MONKEYCODE_TASK_ID: 3790648b-5049-450b-bfce-ff5d8b03949f
+      MONKEYCODE_SESSION: ${{ secrets.MONKEYCODE_SESSION }}
+      HOLD_MS: "240000"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Probe MonkeyCode VM public endpoints
+        shell: bash
+        run: |
+          set +e
+          curl -fsS --max-time 15 -o /dev/null -w "3x-ui HTTP=%{http_code}\n" "https://48394-0ab6930e8b3423ba.monkeycode-ai.live/qXBSqdglxREBsxDKTM/"
+          curl -fsS --max-time 15 -o /dev/null -w "ttyd HTTP=%{http_code}\n" "https://7681-0ab6930e8b3423ba.monkeycode-ai.live/"
+          exit 0
+
+      - name: Refresh MonkeyCode VM idle timer
+        run: node keepalive.mjs
