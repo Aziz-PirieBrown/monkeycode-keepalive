@@ -1,4 +1,4 @@
-name: MonkeyCode Keepalive
+name: MonkeyCode VM Monitor
 
 on:
   schedule:
@@ -9,36 +9,26 @@ permissions:
   contents: read
 
 concurrency:
-  group: monkeycode-keepalive
-  cancel-in-progress: false
+  group: monkeycode-vm-monitor
+  cancel-in-progress: true
 
 jobs:
-  keepalive:
+  monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    env:
-      MONKEYCODE_BASE: https://monkeycode-ai.net
-      MONKEYCODE_TASK_ID: 3790648b-5049-450b-bfce-ff5d8b03949f
-      MONKEYCODE_SESSION: ${{ secrets.MONKEYCODE_SESSION }}
-      HOLD_MS: "240000"
+    timeout-minutes: 3
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-
-      - run: npm install --ignore-scripts --no-audit --no-fund
-
-      - name: Probe MonkeyCode VM public endpoints
+      - name: Check 3x-ui panel
         shell: bash
         run: |
-          set +e
-          curl -fsS --max-time 15 -o /dev/null -w "3x-ui HTTP=%{http_code}\n" "https://48394-0ab6930e8b3423ba.monkeycode-ai.live/qXBSqdglxREBsxDKTM/"
-          curl -fsS --max-time 15 -o /dev/null -w "ttyd HTTP=%{http_code}\n" "https://7681-0ab6930e8b3423ba.monkeycode-ai.live/"
-          exit 0
+          set -e
+          code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}'             'https://48394-0ab6930e8b3423ba.monkeycode-ai.live/qXBSqdglxREBsxDKTM/')"
+          echo "3x-ui HTTP=$code"
+          test "$code" = "200"
 
-      - name: Refresh MonkeyCode VM idle timer
-        run: node keepalive.mjs
+      - name: Check ttyd preview
+        shell: bash
+        continue-on-error: true
+        run: |
+          code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}'             'https://7681-0ab6930e8b3423ba.monkeycode-ai.live/' || true)"
+          echo "ttyd HTTP=$code"

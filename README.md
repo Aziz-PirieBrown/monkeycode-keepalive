@@ -1,11 +1,11 @@
-# MonkeyCode Keepalive
+# MonkeyCode VM Monitor
 
-GitHub Actions backup keepalive for a MonkeyCode task VM.
+Public GitHub Actions health monitor for a MonkeyCode development VM.
 
 - Runs every 2 hours at minute 23 UTC.
-- Opens the official Task Control WebSocket.
-- Keeps it connected for 4 minutes so MonkeyCode's server-side keepalive loop refreshes the VM idle timer multiple times.
-- Also probes the current 3x-ui HTTPS endpoint as a secondary liveness check.
-- No AI messages are sent.
+- Checks the current 3x-ui HTTPS endpoint and ttyd preview endpoint.
+- Can also be run manually from the Actions tab.
+- Does not call MonkeyCode's Task Control keepalive API and does not attempt to bypass the platform's idle/hibernation lifecycle.
 
-The sensitive `monkeycode_ai_session` value is stored only as a GitHub Actions secret named `MONKEYCODE_SESSION`.
+The current task ID is documented only for identification:
+`3790648b-5049-450b-bfce-ff5d8b03949f`
