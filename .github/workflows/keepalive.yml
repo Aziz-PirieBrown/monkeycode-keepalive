@@ -4,7 +4,7 @@ on:
   schedule:
     # 每天 UTC 03:00（北京时间 11:00）自动打卡一次
     - cron: '0 3 * * *'
-  workflow_dispatch: # 支持在 GitHub 网页上手动点击 Run workflow 触发打卡测试
+  workflow_dispatch: # 支持手动点击 Run workflow 触发测试
 
 jobs:
   ping:
@@ -23,12 +23,24 @@ jobs:
       - name: Send Heartbeat to MonkeyCode
         run: |
           echo "正在向 MonkeyCode 任务发送保活请求..."
+          
+          # 直接调用真实的获取任务状态与活跃度接口
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
-            -X POST "https://monkeycode-ai.com/api/v1/tasks/${{ secrets.MONKEY_TASK_ID }}/messages" \
-            -H "Content-Type: application/json" \
-            -H "Cookie: ${{ secrets.MONKEY_COOKIE }}" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-            -d '{"content": "heartbeat", "role": "user"}')
+            -X GET "https://monkeycode-ai.net/api/v1/users/tasks/${{ secrets.MONKEY_TASK_ID }}" \
+            -H 'accept: */*' \
+            -H 'accept-language: zh-CN,zh;q=0.9' \
+            -H 'content-type: application/json' \
+            -H "cookie: ${{ secrets.MONKEY_COOKIE }}" \
+            -H 'dnt: 1' \
+            -H 'priority: u=1, i' \
+            -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"' \
+            -H 'sec-ch-ua-mobile: ?0' \
+            -H 'sec-ch-ua-platform: "Windows"' \
+            -H 'sec-fetch-dest: empty' \
+            -H 'sec-fetch-mode: cors' \
+            -H 'sec-fetch-site: same-origin' \
+            -H 'sec-gpc: 1' \
+            -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36')
 
           echo "HTTP 状态码: $HTTP_STATUS"
           echo "返回信息:"
