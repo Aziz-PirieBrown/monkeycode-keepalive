@@ -2,9 +2,9 @@ name: MonkeyCode Keep Alive
 
 on:
   schedule:
-    # 每天 UTC 03:00（北京时间 11:00）自动打卡一次
-    - cron: '0 3 * * *'
-  workflow_dispatch: # 支持手动点击 Run workflow 触发测试
+    # 每天触发 3 次（覆盖早、中、晚不同时间段，UTC 02:00, 08:00, 14:00，对应北京时间 10:00, 16:00, 22:00）
+    - cron: '17 2,8,14 * * *'
+  workflow_dispatch: # 支持手动测试
 
 jobs:
   ping:
@@ -14,43 +14,57 @@ jobs:
         run: |
           if [ -z "${{ secrets.MONKEY_COOKIE }}" ] || [ -z "${{ secrets.MONKEY_TASK_ID }}" ]; then
             echo "❌ 缺少必要 Secret 配置！"
-            echo "请前往该仓库的 Settings -> Secrets and variables -> Actions"
-            echo "添加 MONKEY_COOKIE 和 MONKEY_TASK_ID 两个密钥。"
             exit 1
           fi
           echo "✅ Secret 配置检查通过"
 
-      - name: Send Heartbeat to MonkeyCode
+      - name: Randomized Delay & Keep-Alive
         run: |
-          echo "正在向 MonkeyCode 任务发送保活请求..."
-          
-          # 直接调用真实的获取任务状态与活跃度接口
+          # 1. 防检测：随机休眠 60 到 900 秒（1~15 分钟），打乱固定的定时特征
+          SLEEP_SECS=$((RANDOM % 840 + 60))
+          echo "防风控：本次随机延迟等待 ${SLEEP_SECS} 秒后执行打卡..."
+          sleep ${SLEEP_SECS}
+
+          # 2. 随机生成拟真动态 User-Agent
+          UA_LIST=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
+          )
+          RANDOM_UA=${UA_LIST[$((RANDOM % ${#UA_LIST[@]}))]}
+
+          # 3. 随机选择保活查询方式（获取任务详情 / 获取钱包活跃状态），防止单一接口调用模式
+          ENDPOINTS=(
+            "https://monkeycode-ai.net/api/v1/users/tasks/${{ secrets.MONKEY_TASK_ID }}"
+            "https://monkeycode-ai.net/api/v1/users/wallet"
+          )
+          TARGET_URL=${ENDPOINTS[$((RANDOM % ${#ENDPOINTS[@]}))]}
+
+          echo "正在发起保活请求: ${TARGET_URL}"
+          echo "使用 User-Agent: ${RANDOM_UA}"
+
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
-            -X GET "https://monkeycode-ai.net/api/v1/users/tasks/${{ secrets.MONKEY_TASK_ID }}" \
+            -X GET "${TARGET_URL}" \
             -H 'accept: */*' \
-            -H 'accept-language: zh-CN,zh;q=0.9' \
+            -H 'accept-language: zh-CN,zh;q=0.9,en;q=0.8' \
             -H 'content-type: application/json' \
             -H "cookie: ${{ secrets.MONKEY_COOKIE }}" \
             -H 'dnt: 1' \
-            -H 'priority: u=1, i' \
-            -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138"' \
-            -H 'sec-ch-ua-mobile: ?0' \
-            -H 'sec-ch-ua-platform: "Windows"' \
             -H 'sec-fetch-dest: empty' \
             -H 'sec-fetch-mode: cors' \
             -H 'sec-fetch-site: same-origin' \
-            -H 'sec-gpc: 1' \
-            -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36')
+            -H "user-agent: ${RANDOM_UA}")
 
           echo "HTTP 状态码: $HTTP_STATUS"
-          echo "返回信息:"
-          cat response.json
+          echo "返回信息摘要:"
+          head -c 200 response.json
           echo ""
 
           if [[ "$HTTP_STATUS" =~ ^20[0-9]$ ]]; then
-            echo "🎉 打卡成功！MonkeyCode 环境活跃时间已刷新至最新。"
+            echo "🎉 打卡成功！MonkeyCode 环境活跃度已刷新。"
           else
             echo "❌ 打卡失败！状态码为 $HTTP_STATUS"
-            echo "提示：请排查 Cookie 是否过期失效，或者 Task ID 是否填写正确。"
+            cat response.json
             exit 1
           fi
